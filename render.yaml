@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: live-call-monitoring
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: ./start.sh
+    envVars:
+      - key: MONGODB_URI
+        sync: false
+      - key: TWILIO_ACCOUNT_SID
+        sync: false
+      - key: TWILIO_AUTH_TOKEN
+        sync: false
+    plan: free

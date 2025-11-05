@@ -1,0 +1,28 @@
+# --- Web Frameworks ---
+flask
+streamlit
+flask-cors
+
+# --- Machine Learning / Audio Processing ---
+tensorflow
+torch
+torchaudio
+librosa
+soundfile
+pydub
+scikit-learn
+openai-whisper
+
+# --- Data Handling ---
+numpy
+pandas
+
+# --- APIs / Integrations ---
+twilio
+requests
+pymongo
+dnspython
+
+# --- Utilities ---
+python-dotenv
+tqdm
