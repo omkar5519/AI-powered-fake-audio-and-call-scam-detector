@@ -9,6 +9,7 @@ import pandas as pd
 import requests
 import whisper
 import gdown
+import zipfile
 
 # ---------------- CONFIG ----------------
 SCAM_KEYWORDS = [
@@ -18,28 +19,25 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"  # TensorFlow SavedModel folder
-ENCODER_PATH = "files/label_encoder.pkl"       # Label encoder
+MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"
+MODEL_ZIP_FILE_ID = "1V83mY45Vein7T4YzaBLHj10HSlCTpZt3"
+ENCODER_PATH = "files/label_encoder.pkl"
 UPLOAD_DIR = "uploads"
-DRIVE_FOLDER_ID = "1C8xOAbuw0iXSj-nzN44l8-ZubNZ5cB3t"  # Your Google Drive folder link
 
 # --- Load model, encoder, and Whisper ---
 @st.cache_resource
 def load_model_and_encoder():
-    # Download SavedModel folder if not exists
+    # If model folder not present, download and extract
     if not os.path.exists(MODEL_FOLDER):
         os.makedirs(MODEL_FOLDER, exist_ok=True)
-        gdown.download_folder(
-            f"https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}",
-            output=MODEL_FOLDER,
-            quiet=False,
-            use_cookies=False
-        )
+        zip_path = os.path.join("files", "model.zip")
+        url = f"https://drive.google.com/uc?id={MODEL_ZIP_FILE_ID}"
+        gdown.download(url, zip_path, quiet=False)
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(MODEL_FOLDER)
+        os.remove(zip_path)
 
-    # Load TensorFlow model
-    model = tf.keras.models.load_model(MODEL_FOLDER)
-
-    # Load label encoder
+    model = tf.keras.models.load_model(MODEL_FOLDER, compile=False)
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
 
@@ -63,7 +61,6 @@ def extract_features(audio_path, sr=16000, n_mfcc=40, duration=3):
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
     mfcc = (mfcc - np.mean(mfcc)) / np.std(mfcc)
     mfcc = np.expand_dims(mfcc, axis=-1)
-    # Add a second channel for compatibility
     scam_plane = np.zeros_like(mfcc)
     features = np.concatenate([mfcc, scam_plane], axis=-1)
     features = np.expand_dims(features, axis=0)
@@ -88,8 +85,7 @@ st.caption("Detects AI voices, scam calls, and real speech using Deep Learning +
 uploaded_file = st.file_uploader("Upload an audio file (.wav or .mp3)", type=["wav", "mp3"])
 
 if uploaded_file is not None:
-    if not os.path.exists(UPLOAD_DIR):
-        os.makedirs(UPLOAD_DIR)
+    os.makedirs(UPLOAD_DIR, exist_ok=True)
     audio_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
     with open(audio_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
@@ -97,33 +93,28 @@ if uploaded_file is not None:
     st.audio(uploaded_file, format="audio/wav")
 
     try:
-        # --- Prediction ---
         features = extract_features(audio_path)
         prediction = model.predict(features)
         predicted_index = np.argmax(prediction)
         predicted_label = encoder.inverse_transform([predicted_index])[0]
         confidence = float(np.max(prediction) * 100)
 
-        # --- Whisper + Scam Analysis ---
         with st.spinner("🔍 Analyzing speech with Whisper..."):
             text, found_keywords, scam_score = analyze_transcription(audio_path)
 
         st.success(f"🧩 Prediction: **{predicted_label}** ({confidence:.2f}% confidence)")
         st.progress(int(confidence))
 
-        # --- Display transcription ---
         if text:
             st.subheader("🗣️ Transcription")
             st.write(text)
         else:
             st.warning("No speech detected or Whisper failed to transcribe.")
 
-        # --- Display scam analysis ---
         if found_keywords:
             st.warning(f"⚠️ Scam keywords detected: {', '.join(found_keywords)}")
         st.metric("💰 Scam Risk Score", f"{scam_score:.1f}%")
 
-        # --- Save prediction locally ---
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         data = {
             "filename": [uploaded_file.name],
@@ -143,7 +134,7 @@ if uploaded_file is not None:
         df_all.to_csv("predictions.csv", index=False)
         st.info("✅ Prediction saved to **predictions.csv**")
 
-        # --- Optional: save to Flask backend / MongoDB ---
+        # Optional backend
         try:
             response = requests.post("http://127.0.0.1:5001/save_prediction", json={
                 "filename": uploaded_file.name,
@@ -160,7 +151,6 @@ if uploaded_file is not None:
         except Exception as e:
             st.warning(f"⚠️ Could not connect to MongoDB backend: {e}")
 
-        # --- Show history ---
         st.subheader("📜 Prediction History")
         st.dataframe(df_all)
 
