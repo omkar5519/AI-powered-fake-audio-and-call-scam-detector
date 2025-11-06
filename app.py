@@ -18,27 +18,28 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_PATH = "audio_cnn_rnn_model_saved"  # SavedModel folder
-ENCODER_PATH = "files/label_encoder.pkl"
-FILE_ID = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Original H5 file on Google Drive
+MODEL_PATH = "audio_cnn_rnn_model_tf"  # SavedModel format
+ENCODER_PATH = "files/label_encoder.pkl"  # small file included in repo
+FILE_ID_H5 = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Optional: H5 download fallback
 
 # --- Load model, encoder, and Whisper ---
 @st.cache_resource
 def load_model_and_encoder():
-    # Download and convert model if SavedModel folder doesn't exist
+    # Load model (SavedModel format)
     if not os.path.exists(MODEL_PATH):
-        # Download .h5 first
+        st.warning("SavedModel folder not found. Downloading .h5 and converting...")
         h5_path = "audio_cnn_rnn_model.h5"
-        if not os.path.exists(h5_path):
-            url = f"https://drive.google.com/uc?id={FILE_ID}"
-            gdown.download(url, h5_path, quiet=False)
-        # Load .h5 and save as SavedModel
-        model = tf.keras.models.load_model(h5_path, compile=False)
-        model.save(MODEL_PATH)
-    else:
-        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+        url = f"https://drive.google.com/uc?id={FILE_ID_H5}"
+        gdown.download(url, h5_path, quiet=False)
+        
+        # Load old H5 and save as SavedModel
+        old_model = tf.keras.models.load_model(h5_path, compile=False)
+        old_model.save(MODEL_PATH)
+        st.success("✅ Model converted to SavedModel format.")
 
-    # Load label encoder
+    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+
+    # Load encoder
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
 
@@ -48,7 +49,6 @@ def load_model_and_encoder():
 def load_whisper():
     return whisper.load_model("base")
 
-# Load resources
 model, encoder = load_model_and_encoder()
 whisper_model = load_whisper()
 
@@ -83,7 +83,7 @@ def analyze_transcription(audio_path):
     except Exception:
         return "", [], 0
 
-# --- UI setup ---
+# --- Streamlit UI ---
 st.title("🎙️ Real / Fake / Scam Voice Detector")
 st.caption("Detects AI voices, scam calls, and real speech using Deep Learning + Whisper")
 
