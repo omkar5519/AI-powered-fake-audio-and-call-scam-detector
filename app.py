@@ -19,17 +19,20 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"
-MODEL_ZIP_FILE_ID = "1V83mY45Vein7T4YzaBLHj10HSlCTpZt3"
-ENCODER_PATH = "files/label_encoder.pkl"
+MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"  # TensorFlow SavedModel folder
+ENCODER_PATH = "files/label_encoder.pkl"      # Label encoder
 UPLOAD_DIR = "uploads"
+
+# Google Drive file ID (your zip file)
+MODEL_ZIP_FILE_ID = "1V83mY45Vein7T4YzaBLHj10HSlCTpZt3"
 
 # --- Load model, encoder, and Whisper ---
 @st.cache_resource
 def load_model_and_encoder():
-    # If model folder not present, download and extract
+    os.makedirs("files", exist_ok=True)
+
+    # Download and unzip model if not exists
     if not os.path.exists(MODEL_FOLDER):
-        os.makedirs(MODEL_FOLDER, exist_ok=True)
         zip_path = os.path.join("files", "model.zip")
         url = f"https://drive.google.com/uc?id={MODEL_ZIP_FILE_ID}"
         gdown.download(url, zip_path, quiet=False)
@@ -38,6 +41,7 @@ def load_model_and_encoder():
         os.remove(zip_path)
 
     model = tf.keras.models.load_model(MODEL_FOLDER, compile=False)
+
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
 
@@ -85,7 +89,8 @@ st.caption("Detects AI voices, scam calls, and real speech using Deep Learning +
 uploaded_file = st.file_uploader("Upload an audio file (.wav or .mp3)", type=["wav", "mp3"])
 
 if uploaded_file is not None:
-    os.makedirs(UPLOAD_DIR, exist_ok=True)
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
     audio_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
     with open(audio_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
@@ -93,28 +98,33 @@ if uploaded_file is not None:
     st.audio(uploaded_file, format="audio/wav")
 
     try:
+        # --- Prediction ---
         features = extract_features(audio_path)
         prediction = model.predict(features)
         predicted_index = np.argmax(prediction)
         predicted_label = encoder.inverse_transform([predicted_index])[0]
         confidence = float(np.max(prediction) * 100)
 
+        # --- Whisper + Scam Analysis ---
         with st.spinner("🔍 Analyzing speech with Whisper..."):
             text, found_keywords, scam_score = analyze_transcription(audio_path)
 
         st.success(f"🧩 Prediction: **{predicted_label}** ({confidence:.2f}% confidence)")
         st.progress(int(confidence))
 
+        # --- Display transcription ---
         if text:
             st.subheader("🗣️ Transcription")
             st.write(text)
         else:
             st.warning("No speech detected or Whisper failed to transcribe.")
 
+        # --- Display scam analysis ---
         if found_keywords:
             st.warning(f"⚠️ Scam keywords detected: {', '.join(found_keywords)}")
         st.metric("💰 Scam Risk Score", f"{scam_score:.1f}%")
 
+        # --- Save prediction locally ---
         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         data = {
             "filename": [uploaded_file.name],
@@ -134,7 +144,7 @@ if uploaded_file is not None:
         df_all.to_csv("predictions.csv", index=False)
         st.info("✅ Prediction saved to **predictions.csv**")
 
-        # Optional backend
+        # --- Optional: save to Flask backend / MongoDB ---
         try:
             response = requests.post("http://127.0.0.1:5001/save_prediction", json={
                 "filename": uploaded_file.name,
@@ -151,6 +161,7 @@ if uploaded_file is not None:
         except Exception as e:
             st.warning(f"⚠️ Could not connect to MongoDB backend: {e}")
 
+        # --- Show history ---
         st.subheader("📜 Prediction History")
         st.dataframe(df_all)
 
