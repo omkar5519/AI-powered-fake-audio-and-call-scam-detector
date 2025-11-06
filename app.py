@@ -19,40 +19,35 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"  # TensorFlow SavedModel folder
-ENCODER_PATH = "files/label_encoder.pkl"      # Label encoder
+MODEL_ZIP_URL = "https://drive.google.com/uc?id=1V83mY45Vein7T4YzaBLHj10HSlCTpZt3"  # Your Google Drive file ID
+MODEL_ZIP_PATH = "files/audio_cnn_rnn_model_tf.zip"
+MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"
+ENCODER_PATH = "files/label_encoder.pkl"
 UPLOAD_DIR = "uploads"
 
-# Google Drive file ID (your zip file)
-MODEL_ZIP_FILE_ID = "1V83mY45Vein7T4YzaBLHj10HSlCTpZt3"
+# --- Download & unzip model ---
+def download_and_extract_model():
+    if not os.path.exists(MODEL_FOLDER):
+        os.makedirs("files", exist_ok=True)
+        st.info("Downloading model...")
+        gdown.download(MODEL_ZIP_URL, MODEL_ZIP_PATH, quiet=False)
+        st.info("Extracting model...")
+        with zipfile.ZipFile(MODEL_ZIP_PATH, 'r') as zip_ref:
+            zip_ref.extractall(MODEL_FOLDER)
+        st.success("Model ready!")
 
 # --- Load model, encoder, and Whisper ---
 @st.cache_resource
 def load_model_and_encoder():
-    os.makedirs("files", exist_ok=True)
-
-    # Download and unzip model if not exists
-    if not os.path.exists(MODEL_FOLDER):
-        zip_path = os.path.join("files", "model.zip")
-        url = f"https://drive.google.com/uc?id={MODEL_ZIP_FILE_ID}"
-        gdown.download(url, zip_path, quiet=False)
-        with zipfile.ZipFile(zip_path, "r") as zip_ref:
-            zip_ref.extractall(MODEL_FOLDER)
-        os.remove(zip_path)
-
+    download_and_extract_model()
     model = tf.keras.models.load_model(MODEL_FOLDER, compile=False)
-
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
-
     return model, encoder
 
 @st.cache_resource
 def load_whisper():
     return whisper.load_model("base")
-
-model, encoder = load_model_and_encoder()
-whisper_model = load_whisper()
 
 # --- Feature extraction ---
 def extract_features(audio_path, sr=16000, n_mfcc=40, duration=3):
@@ -85,6 +80,10 @@ def analyze_transcription(audio_path):
 # --- Streamlit UI ---
 st.title("🎙️ Real / Fake / Scam Voice Detector")
 st.caption("Detects AI voices, scam calls, and real speech using Deep Learning + Whisper")
+
+# Load models
+model, encoder = load_model_and_encoder()
+whisper_model = load_whisper()
 
 uploaded_file = st.file_uploader("Upload an audio file (.wav or .mp3)", type=["wav", "mp3"])
 
@@ -143,23 +142,6 @@ if uploaded_file is not None:
 
         df_all.to_csv("predictions.csv", index=False)
         st.info("✅ Prediction saved to **predictions.csv**")
-
-        # --- Optional: save to Flask backend / MongoDB ---
-        try:
-            response = requests.post("http://127.0.0.1:5001/save_prediction", json={
-                "filename": uploaded_file.name,
-                "prediction": predicted_label,
-                "confidence": confidence,
-                "scam_score": scam_score,
-                "transcription": text,
-                "found_keywords": found_keywords
-            })
-            if response.status_code == 201:
-                st.info("📦 Prediction saved to MongoDB backend!")
-            else:
-                st.warning("⚠️ Failed to save to MongoDB backend.")
-        except Exception as e:
-            st.warning(f"⚠️ Could not connect to MongoDB backend: {e}")
 
         # --- Show history ---
         st.subheader("📜 Prediction History")
