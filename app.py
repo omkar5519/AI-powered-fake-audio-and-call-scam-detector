@@ -20,7 +20,7 @@ SCAM_KEYWORDS = [
 # ---------------- PATHS ----------------
 MODEL_PATH = "audio_cnn_rnn_model.h5"
 ENCODER_PATH = "files/label_encoder.pkl"  # small file included in repo
-FILE_ID = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # your Google Drive .h5 file
+FILE_ID = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Google Drive file ID
 
 # --- Load model, encoder, and Whisper ---
 @st.cache_resource
@@ -30,7 +30,11 @@ def load_model_and_encoder():
         url = f"https://drive.google.com/uc?id={FILE_ID}"
         gdown.download(url, MODEL_PATH, quiet=False)
 
-    model = tf.keras.models.load_model(MODEL_PATH)
+    # Load model with custom objects if needed
+    model = tf.keras.models.load_model(MODEL_PATH, custom_objects={
+        "Bidirectional": tf.keras.layers.Bidirectional,
+        "TimeDistributed": tf.keras.layers.TimeDistributed
+    })
 
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
@@ -137,7 +141,7 @@ if uploaded_file is not None:
         df_all.to_csv("predictions.csv", index=False)
         st.info("✅ Prediction saved to **predictions.csv**")
 
-        # --- Save to Flask backend (optional) ---
+        # --- Optional: save to Flask backend / MongoDB ---
         try:
             response = requests.post("http://127.0.0.1:5001/save_prediction", json={
                 "filename": uploaded_file.name,
