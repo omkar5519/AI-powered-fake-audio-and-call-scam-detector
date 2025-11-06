@@ -18,11 +18,11 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_PATH = "audio_cnn_rnn_model.h5"
+MODEL_PATH = "audio_cnn_rnn_model_v220.h5"  # Use TF 2.20 compatible model
 ENCODER_PATH = "files/label_encoder.pkl"  # small file included in repo
 FILE_ID = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Google Drive file ID
 
-# --- Load model, encoder, and Whisper ---
+# --- Load model and encoder ---
 @st.cache_resource
 def load_model_and_encoder():
     # Download model if not exists
@@ -30,10 +30,12 @@ def load_model_and_encoder():
         url = f"https://drive.google.com/uc?id={FILE_ID}"
         gdown.download(url, MODEL_PATH, quiet=False)
 
-    # Load model with custom objects if needed
+    # Load model with custom objects
     model = tf.keras.models.load_model(MODEL_PATH, custom_objects={
         "Bidirectional": tf.keras.layers.Bidirectional,
-        "TimeDistributed": tf.keras.layers.TimeDistributed
+        "TimeDistributed": tf.keras.layers.TimeDistributed,
+        "LSTM": tf.keras.layers.LSTM,
+        "Dense": tf.keras.layers.Dense,
     })
 
     with open(ENCODER_PATH, "rb") as f:
@@ -41,6 +43,7 @@ def load_model_and_encoder():
 
     return model, encoder
 
+# --- Load Whisper ---
 @st.cache_resource
 def load_whisper():
     return whisper.load_model("base")
