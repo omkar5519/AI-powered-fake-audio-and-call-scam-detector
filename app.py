@@ -18,28 +18,28 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_PATH = "audio_cnn_rnn_model_tf"  # SavedModel format
-ENCODER_PATH = "files/label_encoder.pkl"  # small file included in repo
-FILE_ID_H5 = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Optional: H5 download fallback
+MODEL_FOLDER = "files/audio_cnn_rnn_model_tf"  # TensorFlow SavedModel folder
+ENCODER_PATH = "files/label_encoder.pkl"       # Label encoder
+UPLOAD_DIR = "uploads"
+DRIVE_FOLDER_ID = "1C8xOAbuw0iXSj-nzN44l8-ZubNZ5cB3t"  # Your Google Drive folder link
 
 # --- Load model, encoder, and Whisper ---
 @st.cache_resource
 def load_model_and_encoder():
-    # Load model (SavedModel format)
-    if not os.path.exists(MODEL_PATH):
-        st.warning("SavedModel folder not found. Downloading .h5 and converting...")
-        h5_path = "audio_cnn_rnn_model.h5"
-        url = f"https://drive.google.com/uc?id={FILE_ID_H5}"
-        gdown.download(url, h5_path, quiet=False)
-        
-        # Load old H5 and save as SavedModel
-        old_model = tf.keras.models.load_model(h5_path, compile=False)
-        old_model.save(MODEL_PATH)
-        st.success("✅ Model converted to SavedModel format.")
+    # Download SavedModel folder if not exists
+    if not os.path.exists(MODEL_FOLDER):
+        os.makedirs(MODEL_FOLDER, exist_ok=True)
+        gdown.download_folder(
+            f"https://drive.google.com/drive/folders/{DRIVE_FOLDER_ID}",
+            output=MODEL_FOLDER,
+            quiet=False,
+            use_cookies=False
+        )
 
-    model = tf.keras.models.load_model(MODEL_PATH, compile=False)
+    # Load TensorFlow model
+    model = tf.keras.models.load_model(MODEL_FOLDER)
 
-    # Load encoder
+    # Load label encoder
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
 
@@ -60,14 +60,12 @@ def extract_features(audio_path, sr=16000, n_mfcc=40, duration=3):
         y = y[:max_len]
     else:
         y = np.pad(y, (0, max_len - len(y)))
-
     mfcc = librosa.feature.mfcc(y=y, sr=sr, n_mfcc=n_mfcc)
     mfcc = (mfcc - np.mean(mfcc)) / np.std(mfcc)
     mfcc = np.expand_dims(mfcc, axis=-1)
-
+    # Add a second channel for compatibility
     scam_plane = np.zeros_like(mfcc)
     features = np.concatenate([mfcc, scam_plane], axis=-1)
-
     features = np.expand_dims(features, axis=0)
     features = np.expand_dims(features, axis=1)
     return features.astype(np.float32)
@@ -90,9 +88,9 @@ st.caption("Detects AI voices, scam calls, and real speech using Deep Learning +
 uploaded_file = st.file_uploader("Upload an audio file (.wav or .mp3)", type=["wav", "mp3"])
 
 if uploaded_file is not None:
-    if not os.path.exists("uploads"):
-        os.makedirs("uploads")
-    audio_path = os.path.join("uploads", uploaded_file.name)
+    if not os.path.exists(UPLOAD_DIR):
+        os.makedirs(UPLOAD_DIR)
+    audio_path = os.path.join(UPLOAD_DIR, uploaded_file.name)
     with open(audio_path, "wb") as f:
         f.write(uploaded_file.getbuffer())
 
