@@ -18,36 +18,37 @@ SCAM_KEYWORDS = [
 ]
 
 # ---------------- PATHS ----------------
-MODEL_PATH = "audio_cnn_rnn_model_v220.h5"  # Use TF 2.20 compatible model
-ENCODER_PATH = "files/label_encoder.pkl"  # small file included in repo
-FILE_ID = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Google Drive file ID
+MODEL_PATH = "audio_cnn_rnn_model_saved"  # SavedModel folder
+ENCODER_PATH = "files/label_encoder.pkl"
+FILE_ID = "1_7i6tPYIghuq8CLh3myiF5ShhbIUPGq7"  # Original H5 file on Google Drive
 
-# --- Load model and encoder ---
+# --- Load model, encoder, and Whisper ---
 @st.cache_resource
 def load_model_and_encoder():
-    # Download model if not exists
+    # Download and convert model if SavedModel folder doesn't exist
     if not os.path.exists(MODEL_PATH):
-        url = f"https://drive.google.com/uc?id={FILE_ID}"
-        gdown.download(url, MODEL_PATH, quiet=False)
+        # Download .h5 first
+        h5_path = "audio_cnn_rnn_model.h5"
+        if not os.path.exists(h5_path):
+            url = f"https://drive.google.com/uc?id={FILE_ID}"
+            gdown.download(url, h5_path, quiet=False)
+        # Load .h5 and save as SavedModel
+        model = tf.keras.models.load_model(h5_path, compile=False)
+        model.save(MODEL_PATH)
+    else:
+        model = tf.keras.models.load_model(MODEL_PATH, compile=False)
 
-    # Load model with custom objects
-    model = tf.keras.models.load_model(MODEL_PATH, custom_objects={
-        "Bidirectional": tf.keras.layers.Bidirectional,
-        "TimeDistributed": tf.keras.layers.TimeDistributed,
-        "LSTM": tf.keras.layers.LSTM,
-        "Dense": tf.keras.layers.Dense,
-    })
-
+    # Load label encoder
     with open(ENCODER_PATH, "rb") as f:
         encoder = pickle.load(f)
 
     return model, encoder
 
-# --- Load Whisper ---
 @st.cache_resource
 def load_whisper():
     return whisper.load_model("base")
 
+# Load resources
 model, encoder = load_model_and_encoder()
 whisper_model = load_whisper()
 
