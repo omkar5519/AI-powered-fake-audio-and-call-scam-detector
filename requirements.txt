@@ -26,3 +26,4 @@ dnspython
 # --- Utilities ---
 python-dotenv
 tqdm
+gdown
