@@ -4,7 +4,7 @@ streamlit
 flask-cors
 
 # --- Machine Learning / Audio Processing ---
-tensorflow==2.20.0
+tensorflow 
 torch
 torchaudio
 librosa
